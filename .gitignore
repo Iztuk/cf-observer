@@ -7,6 +7,7 @@
 *.dll
 *.so
 *.dylib
+cf-observer
 
 # Test binary, built with `go test -c`
 *.test

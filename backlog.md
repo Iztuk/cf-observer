@@ -4,10 +4,10 @@
 
 ### Configuration & Routing
 
-- [ ] Implement file-based host configuration loader (JSON/YAML)
-- [ ] Validate host configuration schema at startup
+- [x] Implement file-based host configuration loader (YAML)
+- [x] Validate configuration at startup
 - [ ] Build in-memory routing table for host → upstream mapping
-- [ ] Handle invalid configuration with clear errors
+- [x] Handle invalid configuration with clear errors
 
 ### Proxy Layer
 
