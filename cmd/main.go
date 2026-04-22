@@ -2,6 +2,7 @@ package main
 
 import (
 	"cf-observer/internal/config"
+	"cf-observer/internal/daemon"
 	"flag"
 	"fmt"
 	"log"
@@ -38,17 +39,15 @@ func main() {
 		configFile := startCmd.String("config", "", "path to config file")
 		_ = startCmd.Parse(os.Args[2:])
 
-		conf, err := config.LoadConfigFile(*configFile)
+		hosts, err := config.LoadConfigFile(*configFile)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		if err := conf.Validate(); err != nil {
+		err = daemon.RunDaemon(hosts)
+		if err != nil {
 			log.Fatal(err)
 		}
-
-		config.AppConfig = conf
-		fmt.Println("observer started")
 	case "stop":
 	default:
 		printRootUsage()

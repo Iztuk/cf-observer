@@ -9,10 +9,8 @@ import (
 )
 
 type Config struct {
-	Listen      string          `yaml:"listen"`
-	DefaultHost *Host           `yaml:"default_host"`
-	Hosts       map[string]Host `yaml:"hosts"`
-	AuditConfig AuditConfig     `yaml:"audit_config"`
+	RunTime RunTimeConfig   `yaml:"runtime"`
+	Hosts   map[string]Host `yaml:"hosts"`
 }
 
 type Host struct {
@@ -22,27 +20,32 @@ type Host struct {
 	ResourceContract string   `yaml:"resource_contract"`
 }
 
+type RunTimeConfig struct {
+	Listen      string      `yaml:"listen"`
+	DefaultHost *Host       `yaml:"default_host"`
+	AuditConfig AuditConfig `yaml:"audit_config"`
+}
+
 type AuditConfig struct {
 	Enabled   bool `yaml:"enabled"`
 	QueueSize int  `yaml:"queue_size"`
 	Workers   int  `yaml:"worker"`
 }
 
-var AppConfig *Config
+var AppRunTimeConfig *RunTimeConfig
 
-const defaultConfigYAML = `listen: ":8080"
+const defaultConfigYAML = `# CodeForge Observer
+runtime:
+  listen: ":8080"
 
-default_host:
-  upstream: "http://localhost:8081"
-  api_contract: "contracts/default.json"
-  resource_contract: "resources/default.json"
+  default_host: null
+
+  audit_config:
+    enabled: true
+    queue_size: 1000
+    worker: 4
 
 hosts: {}
-
-audit_config:
-  enabled: true
-  queue_size: 1000
-  workers: 4
 `
 
 func ConfigDir() (string, error) {
