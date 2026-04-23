@@ -53,7 +53,7 @@ func (c *Config) Validate() error {
 		if hostName == "" {
 			return fmt.Errorf("host name cannot be empty")
 		}
-		if host.Upstream == nil {
+		if host.UpstreamRaw == "" {
 			return fmt.Errorf("host %q is missing upstream", hostName)
 		}
 	}
@@ -72,7 +72,13 @@ func (c *Config) ValidateHostUrls() (map[string]Host, error) {
 	for key, host := range c.Hosts {
 		u, err := url.Parse(host.UpstreamRaw)
 		if err != nil {
-			return map[string]Host{}, err
+			return map[string]Host{}, fmt.Errorf("parse upstream for host %q: %w", key, err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return map[string]Host{}, fmt.Errorf("host %q upstream must use http or https", key)
+		}
+		if u.Host == "" {
+			return map[string]Host{}, fmt.Errorf("host %q upstream must include a host", key)
 		}
 
 		c.Hosts[key] = Host{

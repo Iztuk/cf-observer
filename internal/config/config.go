@@ -57,7 +57,7 @@ runtime:
     queue_size: 1000
     worker: 4
 
-hosts: {}
+hosts:
 `
 
 func ConfigDir() (string, error) {

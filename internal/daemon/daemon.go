@@ -21,7 +21,7 @@ func RunDaemon(hosts map[string]config.Host) error {
 
 	_, err = proxy.NewProxyManager(hosts, logger)
 	if err != nil {
-		logger.Fatal(err)
+		return fmt.Errorf("create proxy manager: %w", err)
 	}
 
 	return nil

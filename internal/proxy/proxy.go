@@ -37,11 +37,16 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 
 		originalDirector := rp.Director
 		rp.Director = func(r *http.Request) {
+			originalHost := r.Host
+			originalProto := "http"
+			if r.TLS != nil {
+				originalProto = "https"
+			}
+
 			originalDirector(r)
 
-			r.Host = host.Upstream.Host
-			r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
-			r.Header.Set("X-Forwarded-Proto", "http")
+			r.Header.Set("X-Forwarded-Host", originalHost)
+			r.Header.Set("X-Forwarded-Proto", originalProto)
 		}
 
 		rp.ModifyResponse = func(r *http.Response) error {
