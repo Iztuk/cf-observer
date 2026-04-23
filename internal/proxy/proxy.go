@@ -2,6 +2,9 @@ package proxy
 
 import (
 	"cf-observer/internal/config"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -9,6 +12,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type ProxyManager struct {
@@ -23,6 +27,27 @@ type ProxyTarget struct {
 	Logger *log.Logger
 }
 
+type Observation struct {
+	Timestamp time.Time `json:"timestamp"`
+	Event     string    `json:"event"`
+
+	RequestID string `json:"request_id"`
+
+	Host     string `json:"host"`
+	Method   string `json:"method"`
+	Path     string `json:"path"`
+	Query    string `json:"query"`
+	Upstream string `json:"upstream"`
+
+	Status     int   `json:"status"`
+	DurationMs int64 `json:"duration_ms"`
+
+	Error string `json:"error,omitempty"`
+
+	RequestHeaders  map[string][]string `json:"request_headers,omitempty"`
+	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
+}
+
 func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyManager, error) {
 	pm := &ProxyManager{
 		Hosts:  make(map[string]*ProxyTarget),
@@ -30,7 +55,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 	}
 
 	for key, host := range hosts {
-		host := host
+		h := host
 
 		if host.Upstream == nil {
 			return nil, fmt.Errorf("host %q has nil upstream", key)
@@ -38,8 +63,24 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 
 		rp := &httputil.ReverseProxy{
 			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(host.Upstream)
+				pr.SetURL(h.Upstream)
 				pr.SetXForwarded()
+
+				requestID := getOrCreateRequestID(pr)
+
+				obs := &Observation{
+					Timestamp:      time.Now().UTC(),
+					Event:          "request_started",
+					RequestID:      requestID,
+					Host:           pr.In.Host,
+					Method:         pr.In.Method,
+					Path:           pr.In.URL.Path,
+					Query:          pr.In.URL.RawQuery,
+					Upstream:       h.Upstream.String(),
+					RequestHeaders: cloneHeader(pr.In.Header),
+				}
+
+				writeObservation(logger, obs)
 			},
 		}
 
@@ -76,4 +117,42 @@ func normalizeHost(host string) string {
 		}
 	}
 	return strings.ToLower(host)
+}
+
+func getOrCreateRequestID(r *httputil.ProxyRequest) string {
+	if id := r.In.Header.Get("X-Request-ID"); id != "" {
+		return id
+	}
+
+	if r.In.Header == nil {
+		r.In.Header = make(http.Header)
+	}
+
+	var b [16]byte
+	id := time.Now().UTC().Format("20060102150405.000000000")
+	if _, err := rand.Read(b[:]); err == nil {
+		id = hex.EncodeToString(b[:])
+	}
+	r.In.Header.Set("X-Request-ID", id)
+
+	return id
+}
+
+func cloneHeader(h http.Header) map[string][]string {
+	out := make(map[string][]string, len(h))
+	for k, v := range h {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		out[k] = cp
+	}
+	return out
+}
+
+func writeObservation(logger *log.Logger, obs *Observation) {
+	b, err := json.Marshal(obs)
+	if err != nil {
+		logger.Printf(`{"message":"failed to marshal observation","error":%q}`, err.Error())
+		return
+	}
+	logger.Print(string(b))
 }
