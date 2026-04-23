@@ -66,13 +66,17 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				pr.SetURL(h.Upstream)
 				pr.SetXForwarded()
 
-				requestID := getOrCreateRequestID(pr)
+				originalHost := pr.In.Host
+				pr.In.Header.Set("X-Original-Host", originalHost)
+				pr.Out.Header.Set("X-Original-Host", originalHost)
+
+				requestID := getOrCreateProxyRequestID(pr)
 
 				obs := &Observation{
 					Timestamp:      time.Now().UTC(),
 					Event:          "request_started",
 					RequestID:      requestID,
-					Host:           pr.In.Host,
+					Host:           originalHost,
 					Method:         pr.In.Method,
 					Path:           pr.In.URL.Path,
 					Query:          pr.In.URL.RawQuery,
@@ -81,6 +85,62 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				}
 
 				writeObservation(logger, obs)
+			},
+			ModifyResponse: func(r *http.Response) error {
+				requestID := getOrCreateRequestID(r.Request)
+
+				event := "response_received"
+
+				obs := &Observation{
+					Timestamp:       time.Now().UTC(),
+					Event:           event,
+					RequestID:       requestID,
+					Host:            r.Request.Header.Get("X-Original-Host"),
+					Method:          r.Request.Method,
+					Path:            r.Request.URL.Path,
+					Query:           r.Request.URL.RawQuery,
+					Upstream:        h.Upstream.String(),
+					Status:          r.StatusCode,
+					ResponseHeaders: cloneHeader(r.Header),
+				}
+
+				writeObservation(logger, obs)
+
+				return nil
+			},
+			Transport: &http.Transport{
+				ResponseHeaderTimeout: 5 * time.Second,
+				DialContext: (&net.Dialer{
+					Timeout: 5 * time.Second,
+				}).DialContext,
+			},
+			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+				requestID := getOrCreateRequestID(r)
+
+				event := "proxy_error"
+				status := http.StatusBadGateway
+
+				if ne, ok := err.(net.Error); ok && ne.Timeout() {
+					event = "proxy_timeout"
+					status = http.StatusGatewayTimeout
+				}
+
+				obs := &Observation{
+					Timestamp: time.Now().UTC(),
+					Event:     event,
+					RequestID: requestID,
+					Host:      r.Header.Get("X-Original-Host"),
+					Method:    r.Method,
+					Status:    status,
+					Path:      r.URL.Path,
+					Query:     r.URL.RawQuery,
+					Upstream:  h.Upstream.String(),
+					Error:     err.Error(),
+				}
+
+				writeObservation(logger, obs)
+
+				http.Error(w, http.StatusText(status), status)
 			},
 		}
 
@@ -119,23 +179,39 @@ func normalizeHost(host string) string {
 	return strings.ToLower(host)
 }
 
-func getOrCreateRequestID(r *httputil.ProxyRequest) string {
-	if id := r.In.Header.Get("X-Request-ID"); id != "" {
-		return id
+func getOrCreateProxyRequestID(pr *httputil.ProxyRequest) string {
+	id := pr.In.Header.Get("X-Request-ID")
+	if id == "" {
+		id = newRequestID()
+		pr.In.Header.Set("X-Request-ID", id)
 	}
 
-	if r.In.Header == nil {
-		r.In.Header = make(http.Header)
-	}
-
-	var b [16]byte
-	id := time.Now().UTC().Format("20060102150405.000000000")
-	if _, err := rand.Read(b[:]); err == nil {
-		id = hex.EncodeToString(b[:])
-	}
-	r.In.Header.Set("X-Request-ID", id)
+	pr.Out.Header.Set("X-Request-ID", id)
 
 	return id
+}
+
+func getOrCreateRequestID(r *http.Request) string {
+	if r.Header == nil {
+		r.Header = make(http.Header)
+	}
+
+	id := r.Header.Get("X-Request-ID")
+	if id == "" {
+		id = newRequestID()
+		r.Header.Set("X-Request-ID", id)
+	}
+
+	return id
+}
+
+func newRequestID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err == nil {
+		return hex.EncodeToString(b[:])
+	}
+
+	return time.Now().UTC().Format("20060102150405.000000000")
 }
 
 func cloneHeader(h http.Header) map[string][]string {
