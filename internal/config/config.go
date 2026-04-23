@@ -32,7 +32,19 @@ type AuditConfig struct {
 	Workers   int  `yaml:"worker"`
 }
 
-var AppRunTimeConfig *RunTimeConfig
+type ProcessConfig struct {
+	PidFile  string
+	LogFile  string
+	SockFile string
+}
+
+var AppRunTimeConfig RunTimeConfig
+
+var AppProcessConfig ProcessConfig = ProcessConfig{
+	PidFile:  "/tmp/cf-observer.pid",
+	LogFile:  "/tmp/cf-observer.log",
+	SockFile: "/tmp/cf-observer.sock",
+}
 
 const defaultConfigYAML = `# CodeForge Observer
 runtime:

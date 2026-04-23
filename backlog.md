@@ -6,7 +6,7 @@
 
 - [x] Implement file-based host configuration loader (YAML)
 - [x] Validate configuration at startup
-- [ ] Build in-memory routing table for host → upstream mapping
+- [x] Build in-memory routing table for host → upstream mapping
 - [x] Handle invalid configuration with clear errors
 
 ### Proxy Layer

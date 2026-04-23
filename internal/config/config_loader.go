@@ -39,7 +39,7 @@ func LoadConfigFile(override string) (map[string]Host, error) {
 		return map[string]Host{}, err
 	}
 
-	AppRunTimeConfig = &config.RunTime
+	AppRunTimeConfig = config.RunTime
 
 	return config.ValidateHostUrls()
 }
