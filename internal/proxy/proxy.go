@@ -32,7 +32,7 @@ type Observation struct {
 	Timestamp time.Time `json:"timestamp"`
 	Event     string    `json:"event"`
 
-	RequestID string `json:"request_id"`
+	RequestId string `json:"request_id"`
 
 	Host     string `json:"host"`
 	Method   string `json:"method"`
@@ -49,6 +49,7 @@ type Observation struct {
 	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
 }
 
+// TODO: Move the observation logging to the audit layer
 func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyManager, error) {
 	pm := &ProxyManager{
 		Hosts:  make(map[string]*ProxyTarget),
@@ -74,12 +75,12 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				start := time.Now().UTC()
 				pr.Out.Header.Set("X-Request-Timestamp", start.Format(time.RFC3339Nano))
 
-				requestID := getOrCreateProxyRequestID(pr)
+				requestID := getOrCreateProxyRequestId(pr)
 
 				obs := &Observation{
 					Timestamp:      time.Now().UTC(),
 					Event:          "request_started",
-					RequestID:      requestID,
+					RequestId:      requestID,
 					Host:           originalHost,
 					Method:         pr.In.Method,
 					Path:           pr.In.URL.Path,
@@ -91,7 +92,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				writeObservation(logger, obs)
 			},
 			ModifyResponse: func(r *http.Response) error {
-				requestID := getOrCreateRequestID(r.Request)
+				requestID := getOrCreateRequestId(r.Request)
 
 				event := "response_received"
 
@@ -105,7 +106,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				obs := &Observation{
 					Timestamp:       time.Now().UTC(),
 					Event:           event,
-					RequestID:       requestID,
+					RequestId:       requestID,
 					Host:            r.Request.Header.Get("X-Original-Host"),
 					Method:          r.Request.Method,
 					Path:            r.Request.URL.Path,
@@ -127,7 +128,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				}).DialContext,
 			},
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-				requestID := getOrCreateRequestID(r)
+				requestID := getOrCreateRequestId(r)
 
 				event := "proxy_error"
 				status := http.StatusBadGateway
@@ -148,7 +149,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				obs := &Observation{
 					Timestamp:  time.Now().UTC(),
 					Event:      event,
-					RequestID:  requestID,
+					RequestId:  requestID,
 					Host:       r.Header.Get("X-Original-Host"),
 					Method:     r.Method,
 					Status:     status,
@@ -200,10 +201,10 @@ func normalizeHost(host string) string {
 	return strings.ToLower(host)
 }
 
-func getOrCreateProxyRequestID(pr *httputil.ProxyRequest) string {
+func getOrCreateProxyRequestId(pr *httputil.ProxyRequest) string {
 	id := pr.In.Header.Get("X-Request-ID")
 	if id == "" {
-		id = newRequestID()
+		id = newRequestId()
 	}
 
 	pr.Out.Header.Set("X-Request-ID", id)
@@ -211,21 +212,21 @@ func getOrCreateProxyRequestID(pr *httputil.ProxyRequest) string {
 	return id
 }
 
-func getOrCreateRequestID(r *http.Request) string {
+func getOrCreateRequestId(r *http.Request) string {
 	if r.Header == nil {
 		r.Header = make(http.Header)
 	}
 
 	id := r.Header.Get("X-Request-ID")
 	if id == "" {
-		id = newRequestID()
+		id = newRequestId()
 		r.Header.Set("X-Request-ID", id)
 	}
 
 	return id
 }
 
-func newRequestID() string {
+func newRequestId() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err == nil {
 		return hex.EncodeToString(b[:])
