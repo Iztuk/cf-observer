@@ -11,11 +11,11 @@
 
 ### Proxy Layer
 
-- [ ] Implement basic HTTP reverse proxy
-- [ ] Route requests based on host configuration
-- [ ] Forward requests to upstream service
-- [ ] Return upstream responses transparently to client
-- [ ] Handle upstream failures (502 / 504 responses)
+- [x] Implement basic HTTP reverse proxy
+- [x] Route requests based on host configuration
+- [x] Forward requests to upstream service
+- [x] Return upstream responses transparently to client
+- [x] Handle upstream failures (502 / 504 responses)
 
 ### Audit Job Model
 

@@ -3,9 +3,12 @@ package daemon
 import (
 	"cf-observer/internal/config"
 	"cf-observer/internal/proxy"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"time"
 )
 
 func RunDaemon(hosts map[string]config.Host) error {
@@ -17,11 +20,22 @@ func RunDaemon(hosts map[string]config.Host) error {
 
 	logger := log.New(f, "cf-observer: ", log.LstdFlags)
 
-	// Ensure single instance of daemon
-
-	_, err = proxy.NewProxyManager(hosts, logger)
+	pm, err := proxy.NewProxyManager(hosts, logger)
 	if err != nil {
 		return fmt.Errorf("create proxy manager: %w", err)
+	}
+
+	server := &http.Server{
+		Addr:              config.AppRunTimeConfig.Listen,
+		Handler:           pm,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("server failed: %w", err)
 	}
 
 	return nil
