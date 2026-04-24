@@ -19,10 +19,11 @@
 
 ### Audit Job Model
 
-- [ ] Define request audit job structure
-- [ ] Define response audit job structure
-- [ ] Define failure audit job structure
-- [ ] Include metadata (host, path, method, status, request ID)
+- [x] Define request audit job structure
+- [x] Define response audit job structure
+- [x] Define failure audit job structure
+- [x] Include metadata (host, path, method, status, request ID)
+- [x] Add helper constructors: NewRequestJob, NewResponseJob, NewFailureJob
 
 ### Queue Layer
 
