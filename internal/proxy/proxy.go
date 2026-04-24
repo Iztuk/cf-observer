@@ -67,8 +67,10 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				pr.SetXForwarded()
 
 				originalHost := pr.In.Host
-				pr.In.Header.Set("X-Original-Host", originalHost)
 				pr.Out.Header.Set("X-Original-Host", originalHost)
+
+				start := time.Now().UTC()
+				pr.Out.Header.Set("X-Request-Timestamp", start.Format(time.RFC3339Nano))
 
 				requestID := getOrCreateProxyRequestID(pr)
 
@@ -91,6 +93,13 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 
 				event := "response_received"
 
+				start, err := time.Parse(time.RFC3339Nano, r.Request.Header.Get("X-Request-Timestamp"))
+
+				var durationMs int64
+				if err == nil {
+					durationMs = time.Since(start).Milliseconds()
+				}
+
 				obs := &Observation{
 					Timestamp:       time.Now().UTC(),
 					Event:           event,
@@ -101,6 +110,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 					Query:           r.Request.URL.RawQuery,
 					Upstream:        h.Upstream.String(),
 					Status:          r.StatusCode,
+					DurationMs:      durationMs,
 					ResponseHeaders: cloneHeader(r.Header),
 				}
 
@@ -125,17 +135,25 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 					status = http.StatusGatewayTimeout
 				}
 
+				start, parseErr := time.Parse(time.RFC3339Nano, r.Header.Get("X-Request-Timestamp"))
+
+				var durationMs int64
+				if parseErr == nil {
+					durationMs = time.Since(start).Milliseconds()
+				}
+
 				obs := &Observation{
-					Timestamp: time.Now().UTC(),
-					Event:     event,
-					RequestID: requestID,
-					Host:      r.Header.Get("X-Original-Host"),
-					Method:    r.Method,
-					Status:    status,
-					Path:      r.URL.Path,
-					Query:     r.URL.RawQuery,
-					Upstream:  h.Upstream.String(),
-					Error:     err.Error(),
+					Timestamp:  time.Now().UTC(),
+					Event:      event,
+					RequestID:  requestID,
+					Host:       r.Header.Get("X-Original-Host"),
+					Method:     r.Method,
+					Status:     status,
+					Path:       r.URL.Path,
+					Query:      r.URL.RawQuery,
+					Upstream:   h.Upstream.String(),
+					DurationMs: durationMs,
+					Error:      err.Error(),
 				}
 
 				writeObservation(logger, obs)
