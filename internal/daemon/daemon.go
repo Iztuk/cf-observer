@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func RunDaemon(hosts map[string]config.Host) error {
@@ -25,12 +26,16 @@ func RunDaemon(hosts map[string]config.Host) error {
 	}
 
 	server := &http.Server{
-		Addr:    config.AppRunTimeConfig.Listen,
-		Handler: pm,
+		Addr:              config.AppRunTimeConfig.Listen,
+		Handler:           pm,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("server failed: %v", err)
+		return fmt.Errorf("server failed: %w", err)
 	}
 
 	return nil

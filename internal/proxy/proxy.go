@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -39,8 +40,8 @@ type Observation struct {
 	Query    string `json:"query"`
 	Upstream string `json:"upstream"`
 
-	Status     int   `json:"status"`
-	DurationMs int64 `json:"duration_ms"`
+	Status     int   `json:"status,omitempty"`
+	DurationMs int64 `json:"duration_ms,omitempty"`
 
 	Error string `json:"error,omitempty"`
 
@@ -61,6 +62,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 			return nil, fmt.Errorf("host %q has nil upstream", key)
 		}
 
+		// TODO: Redact sensitive request/response headers before logging
 		rp := &httputil.ReverseProxy{
 			Rewrite: func(pr *httputil.ProxyRequest) {
 				pr.SetURL(h.Upstream)
@@ -130,7 +132,8 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				event := "proxy_error"
 				status := http.StatusBadGateway
 
-				if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				var ne net.Error
+				if errors.As(err, &ne) && ne.Timeout() {
 					event = "proxy_timeout"
 					status = http.StatusGatewayTimeout
 				}
@@ -201,7 +204,6 @@ func getOrCreateProxyRequestID(pr *httputil.ProxyRequest) string {
 	id := pr.In.Header.Get("X-Request-ID")
 	if id == "" {
 		id = newRequestID()
-		pr.In.Header.Set("X-Request-ID", id)
 	}
 
 	pr.Out.Header.Set("X-Request-ID", id)
