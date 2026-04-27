@@ -49,6 +49,7 @@ type Observation struct {
 	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
 }
 
+// TODO: Move the observation logging to the audit layer
 func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyManager, error) {
 	pm := &ProxyManager{
 		Hosts:  make(map[string]*ProxyTarget),
@@ -85,7 +86,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 					Path:           pr.In.URL.Path,
 					Query:          pr.In.URL.RawQuery,
 					Upstream:       h.Upstream.String(),
-					RequestHeaders: cloneHeader(pr.In.Header),
+					RequestHeaders: pr.In.Header.Clone(),
 				}
 
 				writeObservation(logger, obs)
@@ -113,7 +114,7 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 					Upstream:        h.Upstream.String(),
 					Status:          r.StatusCode,
 					DurationMs:      durationMs,
-					ResponseHeaders: cloneHeader(r.Header),
+					ResponseHeaders: r.Header.Clone(),
 				}
 
 				writeObservation(logger, obs)
@@ -232,16 +233,6 @@ func newRequestID() string {
 	}
 
 	return time.Now().UTC().Format("20060102150405.000000000")
-}
-
-func cloneHeader(h http.Header) map[string][]string {
-	out := make(map[string][]string, len(h))
-	for k, v := range h {
-		cp := make([]string, len(v))
-		copy(cp, v)
-		out[k] = cp
-	}
-	return out
 }
 
 func writeObservation(logger *log.Logger, obs *Observation) {
