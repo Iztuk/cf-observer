@@ -13,6 +13,9 @@ type Job interface {
 
 type Queue struct {
 	jobs chan Job
+	mu   sync.RWMutex
+	done bool
+	once sync.Once
 }
 
 func (r RequestJob) JobType() JobType {
@@ -39,15 +42,6 @@ func (r FailureJob) Process() {
 	fmt.Printf("\nProcessing Failure Job: %v", r)
 }
 
-func worker(id int, queue <-chan Job, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for job := range queue {
-		fmt.Printf("[Worker %d] Handling %s", id, job.JobType())
-		job.Process()
-	}
-}
-
 func NewQueue(size int) *Queue {
 	return &Queue{
 		jobs: make(chan Job, size),
@@ -55,6 +49,17 @@ func NewQueue(size int) *Queue {
 }
 
 func (q *Queue) TryEnqueue(job Job) bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	if q.done {
+		return false
+	}
+
+	if job == nil {
+		return false
+	}
+
 	select {
 	case q.jobs <- job:
 		return true
@@ -97,5 +102,10 @@ func ProcessJob(job Job) error {
 }
 
 func (q *Queue) Close() {
-	close(q.jobs)
+	q.once.Do(func() {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		q.done = true
+		close(q.jobs)
+	})
 }
