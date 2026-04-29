@@ -85,32 +85,11 @@ func NewProxyManager(hosts map[string]config.Host, queue *audit.Queue, logger *l
 				}
 			},
 			ModifyResponse: func(r *http.Response) error {
-				requestID := getOrCreateRequestID(r.Request)
+				job := audit.NewResponseJob(r, h.Upstream.String())
 
-				event := "response_received"
-
-				start, err := time.Parse(time.RFC3339Nano, r.Request.Header.Get("X-Request-Timestamp"))
-
-				var durationMs int64
-				if err == nil {
-					durationMs = time.Since(start).Milliseconds()
+				if !queue.TryEnqueue(job) {
+					logger.Printf("audit queue full; dropping response job")
 				}
-
-				obs := &Observation{
-					Timestamp:       time.Now().UTC(),
-					Event:           event,
-					RequestID:       requestID,
-					Host:            r.Request.Header.Get("X-Original-Host"),
-					Method:          r.Request.Method,
-					Path:            r.Request.URL.Path,
-					Query:           r.Request.URL.RawQuery,
-					Upstream:        h.Upstream.String(),
-					Status:          r.StatusCode,
-					DurationMs:      durationMs,
-					ResponseHeaders: r.Header.Clone(),
-				}
-
-				writeObservation(logger, obs)
 
 				return nil
 			},

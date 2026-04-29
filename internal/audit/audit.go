@@ -89,16 +89,26 @@ func NewRequestJob(r *http.Request, upstream string, start time.Time) *RequestJo
 func NewResponseJob(r *http.Response, upstream string) *ResponseJob {
 	requestID := getOrCreateRequestID(r.Request)
 
-	start, _ := time.Parse(time.RFC3339Nano, r.Request.Header.Get("X-Request-Timestamp"))
-
 	var duration int64
-	if !start.IsZero() {
+	start, err := time.Parse(time.RFC3339Nano, r.Request.Header.Get("X-Request-Timestamp"))
+	if err == nil {
 		duration = time.Since(start).Milliseconds()
 	}
 
 	host := r.Request.Header.Get("X-Original-Host")
 	if host == "" {
 		host = r.Request.Host
+	}
+
+	var body []byte
+	if r.Body != nil {
+		b, err := io.ReadAll(r.Body)
+		if err == nil {
+			body = b
+		}
+
+		_ = r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(body))
 	}
 
 	return &ResponseJob{
@@ -115,6 +125,7 @@ func NewResponseJob(r *http.Response, upstream string) *ResponseJob {
 			DurationMs: duration,
 		},
 		Headers: r.Header.Clone(),
+		Body:    body,
 	}
 }
 
