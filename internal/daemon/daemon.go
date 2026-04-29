@@ -20,9 +20,14 @@ func RunDaemon(hosts map[string]config.Host) error {
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
-	defer f.Close()
 
 	logger := log.New(f, "cf-observer: ", log.LstdFlags)
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			logger.Printf("failed to close log file: %v", err)
+		}
+	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
