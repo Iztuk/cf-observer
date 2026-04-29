@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"cf-observer/internal/audit"
 	"cf-observer/internal/config"
 	"crypto/rand"
 	"encoding/hex"
@@ -50,7 +51,7 @@ type Observation struct {
 }
 
 // TODO: Move the observation logging to the audit layer
-func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyManager, error) {
+func NewProxyManager(hosts map[string]config.Host, queue *audit.Queue, logger *log.Logger) (*ProxyManager, error) {
 	pm := &ProxyManager{
 		Hosts:  make(map[string]*ProxyTarget),
 		Logger: logger,
@@ -75,21 +76,13 @@ func NewProxyManager(hosts map[string]config.Host, logger *log.Logger) (*ProxyMa
 				start := time.Now().UTC()
 				pr.Out.Header.Set("X-Request-Timestamp", start.Format(time.RFC3339Nano))
 
-				requestID := getOrCreateProxyRequestID(pr)
+				getOrCreateProxyRequestID(pr)
 
-				obs := &Observation{
-					Timestamp:      time.Now().UTC(),
-					Event:          "request_started",
-					RequestID:      requestID,
-					Host:           originalHost,
-					Method:         pr.In.Method,
-					Path:           pr.In.URL.Path,
-					Query:          pr.In.URL.RawQuery,
-					Upstream:       h.Upstream.String(),
-					RequestHeaders: pr.In.Header.Clone(),
+				job := audit.NewRequestJob(pr.Out, h.Upstream.String(), start)
+
+				if !queue.TryEnqueue(job) {
+					logger.Printf("audit queue full; dropping request job")
 				}
-
-				writeObservation(logger, obs)
 			},
 			ModifyResponse: func(r *http.Response) error {
 				requestID := getOrCreateRequestID(r.Request)

@@ -1,8 +1,10 @@
 package audit
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -48,18 +50,30 @@ type FailureJob struct {
 	Error string
 }
 
+// TODO: Add a user configurable limit to the request/response bodies
 func NewRequestJob(r *http.Request, upstream string, start time.Time) *RequestJob {
-	requestId := getOrCreateRequestID(r)
+	requestID := getOrCreateRequestID(r)
 
 	host := r.Header.Get("X-Original-Host")
 	if host == "" {
 		host = r.Host
 	}
 
+	var body []byte
+	if r.Body != nil {
+		b, err := io.ReadAll(r.Body)
+		if err == nil {
+			body = b
+		}
+
+		_ = r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(body))
+	}
+
 	return &RequestJob{
 		Type: RequestJobType,
 		Meta: Metadata{
-			RequestID: requestId,
+			RequestID: requestID,
 			Host:      host,
 			Method:    r.Method,
 			Path:      r.URL.Path,
@@ -68,11 +82,12 @@ func NewRequestJob(r *http.Request, upstream string, start time.Time) *RequestJo
 			Timestamp: start,
 		},
 		Headers: r.Header.Clone(),
+		Body:    body,
 	}
 }
 
 func NewResponseJob(r *http.Response, upstream string) *ResponseJob {
-	requestId := getOrCreateRequestID(r.Request)
+	requestID := getOrCreateRequestID(r.Request)
 
 	start, _ := time.Parse(time.RFC3339Nano, r.Request.Header.Get("X-Request-Timestamp"))
 
@@ -89,7 +104,7 @@ func NewResponseJob(r *http.Response, upstream string) *ResponseJob {
 	return &ResponseJob{
 		Type: ResponseJobType,
 		Meta: Metadata{
-			RequestID:  requestId,
+			RequestID:  requestID,
 			Host:       host,
 			Method:     r.Request.Method,
 			Path:       r.Request.URL.Path,
@@ -104,7 +119,7 @@ func NewResponseJob(r *http.Response, upstream string) *ResponseJob {
 }
 
 func NewFailureJob(r *http.Request, upstream string, err error) *FailureJob {
-	requestId := getOrCreateRequestID(r)
+	requestID := getOrCreateRequestID(r)
 
 	status := http.StatusBadGateway
 	if ne, ok := err.(net.Error); ok && ne.Timeout() {
@@ -126,7 +141,7 @@ func NewFailureJob(r *http.Request, upstream string, err error) *FailureJob {
 	return &FailureJob{
 		Type: FailureJobType,
 		Meta: Metadata{
-			RequestID:  requestId,
+			RequestID:  requestID,
 			Host:       host,
 			Method:     r.Method,
 			Path:       r.URL.Path,
