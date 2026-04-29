@@ -3,6 +3,7 @@ package audit
 import (
 	"fmt"
 	"log"
+	"runtime/debug"
 	"sync"
 )
 
@@ -78,11 +79,22 @@ func (q *Queue) StartWorkers(count int, logger *log.Logger) *sync.WaitGroup {
 			defer wg.Done()
 
 			for job := range q.jobs {
-				logger.Printf("audit worker %d handling %s", workerID, job.JobType())
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							logger.Printf(
+								"audit worker %d panic: %v\n%s",
+								workerID,
+								r,
+								debug.Stack(),
+							)
+						}
+					}()
 
-				if err := ProcessJob(job); err != nil {
-					logger.Printf("audit worker %d failed to process job: %v", workerID, err)
-				}
+					if err := ProcessJob(job); err != nil {
+						logger.Printf("audit worker %d failed to process job: %v", workerID, err)
+					}
+				}()
 			}
 
 			logger.Printf("audit worker %d queue closed", workerID)
