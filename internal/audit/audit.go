@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -50,6 +51,15 @@ type FailureJob struct {
 	Error string
 }
 
+type CapturingBody struct {
+	reader io.Reader
+	closer io.Closer
+
+	buf  bytes.Buffer
+	once sync.Once
+	done func([]byte)
+}
+
 // NOTE:
 // We read the full request/response body here to capture it for auditing,
 // then restore the body so the proxy/client can continue using it.
@@ -66,17 +76,6 @@ func NewRequestJob(r *http.Request, upstream string, start time.Time) *RequestJo
 		host = r.Host
 	}
 
-	var body []byte
-	if r.Body != nil {
-		b, err := io.ReadAll(r.Body)
-		if err == nil {
-			body = b
-		}
-
-		_ = r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(body))
-	}
-
 	return &RequestJob{
 		Type: RequestJobType,
 		Meta: Metadata{
@@ -89,7 +88,6 @@ func NewRequestJob(r *http.Request, upstream string, start time.Time) *RequestJo
 			Timestamp: start,
 		},
 		Headers: r.Header.Clone(),
-		Body:    body,
 	}
 }
 
@@ -107,17 +105,6 @@ func NewResponseJob(r *http.Response, upstream string) *ResponseJob {
 		host = r.Request.Host
 	}
 
-	var body []byte
-	if r.Body != nil {
-		b, err := io.ReadAll(r.Body)
-		if err == nil {
-			body = b
-		}
-
-		_ = r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(body))
-	}
-
 	return &ResponseJob{
 		Type: ResponseJobType,
 		Meta: Metadata{
@@ -132,7 +119,6 @@ func NewResponseJob(r *http.Response, upstream string) *ResponseJob {
 			DurationMs: duration,
 		},
 		Headers: r.Header.Clone(),
-		Body:    body,
 	}
 }
 
@@ -172,6 +158,41 @@ func NewFailureJob(r *http.Request, upstream string, err error) *FailureJob {
 		},
 		Error: err.Error(),
 	}
+}
+
+func NewCapturingBody(body io.ReadCloser, done func([]byte)) *CapturingBody {
+	cb := &CapturingBody{
+		closer: body,
+		done:   done,
+	}
+
+	cb.reader = io.TeeReader(body, &cb.buf)
+
+	return cb
+}
+
+func (c *CapturingBody) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+
+	if err == io.EOF {
+		c.finish()
+	}
+
+	return n, err
+}
+
+func (c *CapturingBody) Close() error {
+	c.finish()
+	return c.closer.Close()
+}
+
+func (c *CapturingBody) finish() {
+	c.once.Do(func() {
+		if c.done != nil {
+			bodyCopy := append([]byte(nil), c.buf.Bytes()...)
+			c.done(bodyCopy)
+		}
+	})
 }
 
 func getOrCreateRequestID(r *http.Request) string {
