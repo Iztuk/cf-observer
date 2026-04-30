@@ -48,8 +48,8 @@
 
 ### Persistence Layer (SQLite)
 
-- [ ] Initialize SQLite database
-- [ ] Design findings table schema
+- [x] Initialize SQLite database
+- [x] Design findings table schema
 - [ ] Persist audit findings
 - [ ] Persist request/response metadata
 - [ ] Ensure data persists across restarts

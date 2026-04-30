@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cf-observer/internal/audit"
 	"cf-observer/internal/config"
 	"cf-observer/internal/daemon"
 	"flag"
@@ -26,14 +27,31 @@ func main() {
 	case "init":
 		initCmd := flag.NewFlagSet("init", flag.ExitOnError)
 		force := initCmd.Bool("force", false, "Overwrite existing config file")
+		resetDB := initCmd.Bool("reset-db", false, "Delete and recreate the database")
 		_ = initCmd.Parse(os.Args[2:])
 
-		path, err := config.InitConfigDir(*force)
+		err := config.InitConfigDir(*force)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fmt.Printf("Initialized configuration at %s\n", path)
+		configDir, err := config.ConfigDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		dbPath := configDir + "/cf-observer.db"
+		err = audit.InitDatabase(dbPath, *resetDB)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Printf(`Initialization complete.
+Config directory: %s
+Files Created:
+	config.yaml
+	cf-observer.db
+`, configDir)
 	case "start":
 		startCmd := flag.NewFlagSet("start", flag.ExitOnError)
 		configFile := startCmd.String("config", "", "path to config file")

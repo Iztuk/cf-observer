@@ -78,14 +78,14 @@ func ConfigFilePath() (string, error) {
 	return filepath.Join(dir, "config.yaml"), nil
 }
 
-func InitConfigDir(force bool) (string, error) {
+func InitConfigDir(force bool) error {
 	dir, err := ConfigDir()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("create config directory: %w", err)
+		return fmt.Errorf("create config directory: %w", err)
 	}
 
 	configPath := filepath.Join(dir, "config.yaml")
@@ -93,16 +93,16 @@ func InitConfigDir(force bool) (string, error) {
 	if !force {
 		_, err = os.Stat(configPath)
 		if err == nil {
-			return configPath, fmt.Errorf("config file already exists: %s", configPath)
+			return fmt.Errorf("config file already exists: %s", configPath)
 		}
 		if !errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("check config file: %w", err)
+			return fmt.Errorf("check config file: %w", err)
 		}
 	}
 
 	if err := os.WriteFile(configPath, []byte(defaultConfigYAML), 0o644); err != nil {
-		return "", fmt.Errorf("write config file: %w", err)
+		return fmt.Errorf("write config file: %w", err)
 	}
 
-	return configPath, nil
+	return nil
 }
