@@ -41,18 +41,18 @@
 
 ### Worker Layer
 
-- [ ] Implement worker pool
-- [ ] Configure worker concurrency
-- [ ] Continuously consume audit jobs from queue
-- [ ] Handle graceful worker shutdown
+- [x] Implement worker pool
+- [x] Configure worker concurrency
+- [x] Continuously consume audit jobs from queue
+- [x] Handle graceful worker shutdown
 
 ### Persistence Layer (SQLite)
 
-- [ ] Initialize SQLite database
-- [ ] Design findings table schema
-- [ ] Persist audit findings
-- [ ] Persist request/response metadata
-- [ ] Ensure data persists across restarts
+- [x] Initialize SQLite database
+- [x] Design findings table schema
+- [x] Persist audit findings
+- [x] Persist request/response metadata
+- [x] Ensure data persists across restarts
 
 ### Minimal Auditing (Skeleton)
 
