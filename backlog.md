@@ -67,7 +67,7 @@
 
 ### API Contract Integration
 
-- [ ] Load API contract files per host
+- [x] Load API contract files per host
 - [ ] Validate contract structure at startup
 - [ ] Map contracts to routes and methods
 
