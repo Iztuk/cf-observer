@@ -10,19 +10,15 @@ import (
 	yaml "gopkg.in/yaml.v3"
 )
 
-func LoadConfigFile(override string) (map[string]Host, error) {
+func LoadConfigFile() (map[string]Host, error) {
 	var configPath string
 
-	if override != "" {
-		configPath = override
-	} else {
-		baseDir, err := os.UserConfigDir()
-		if err != nil {
-			return map[string]Host{}, err
-		}
-
-		configPath = filepath.Join(baseDir, "codeforge-observer", "config.yaml")
+	baseDir, err := os.UserConfigDir()
+	if err != nil {
+		return map[string]Host{}, err
 	}
+
+	configPath = filepath.Join(baseDir, "codeforge-observer", "config.yaml")
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
