@@ -211,7 +211,7 @@ func validateOpenAPIContractStructure(doc OpenAPIDoc) (OpenAPIDoc, error) {
 			return OpenAPIDoc{}, fmt.Errorf("invalid OpenAPI contract: path %q must start with '/'", path)
 		}
 
-		if !pathItem.HasOperation() {
+		if !pathItem.hasOperation() {
 			return OpenAPIDoc{}, fmt.Errorf("invalid OpenAPI contract: path %q has no operations", path)
 		}
 	}
@@ -219,7 +219,7 @@ func validateOpenAPIContractStructure(doc OpenAPIDoc) (OpenAPIDoc, error) {
 	return doc, nil
 }
 
-func (p OpenAPIPathItem) HasOperation() bool {
+func (p OpenAPIPathItem) hasOperation() bool {
 	return p.GET != nil ||
 		p.POST != nil ||
 		p.PUT != nil ||
@@ -228,4 +228,103 @@ func (p OpenAPIPathItem) HasOperation() bool {
 		p.HEAD != nil ||
 		p.OPTIONS != nil ||
 		p.TRACE != nil
+}
+
+func (d OpenAPIDoc) FindOpenAPIOperation(method, path string) (*OpenAPIOperation, bool) {
+	if pathItem, ok := d.Paths[path]; ok {
+		op := pathItem.OperationForMethod(method)
+		if op != nil {
+			return op, true
+		}
+	}
+
+	for contractPath, pathItem := range d.Paths {
+		if !matchOpenAPIPath(contractPath, path) {
+			continue
+		}
+
+		op := pathItem.OperationForMethod(method)
+		if op != nil {
+			return op, true
+		}
+	}
+
+	return nil, false
+}
+
+func (p OpenAPIPathItem) OperationForMethod(method string) *OpenAPIOperation {
+
+	switch strings.ToUpper(method) {
+	case "GET":
+		if p.GET != nil {
+			return p.GET
+		}
+	case "POST":
+		if p.POST != nil {
+			return p.POST
+		}
+	case "PUT":
+		if p.PUT != nil {
+			return p.PUT
+		}
+	case "PATCH":
+		if p.PATCH != nil {
+			return p.PATCH
+		}
+	case "DELETE":
+		if p.DELETE != nil {
+			return p.DELETE
+		}
+	case "HEAD":
+		if p.HEAD != nil {
+			return p.HEAD
+		}
+	case "OPTIONS":
+		if p.OPTIONS != nil {
+			return p.OPTIONS
+		}
+	case "TRACE":
+		if p.TRACE != nil {
+			return p.TRACE
+		}
+	}
+
+	return nil
+}
+
+func matchOpenAPIPath(contractPath, requestPath string) bool {
+	contractParts := splitPath(contractPath)
+	requestParts := splitPath(requestPath)
+
+	if len(contractParts) != len(requestParts) {
+		return false
+	}
+
+	for i := range contractParts {
+		contractPart := contractParts[i]
+		requestPart := requestParts[i]
+
+		if isPathParam(contractPart) {
+			continue
+		}
+
+		if contractPart != requestPart {
+			return false
+		}
+	}
+
+	return true
+}
+
+func splitPath(path string) []string {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return []string{}
+	}
+
+	return strings.Split(path, "/")
+}
+
+func isPathParam(segment string) bool {
+	return strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}") && len(segment) > 2
 }

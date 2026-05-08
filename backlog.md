@@ -69,7 +69,7 @@
 
 - [x] Load API contract files per host
 - [x] Validate contract structure at startup
-- [ ] Map contracts to routes and methods
+- [x] Map contracts to routes and methods
 
 ### Request-Side API Auditing
 
