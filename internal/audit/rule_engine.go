@@ -1,9 +1,11 @@
 package audit
 
 import (
-	"time"
-
-	"github.com/google/uuid"
+	"cf-observer/internal/config"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 type RuleID string
@@ -131,35 +133,92 @@ type Rule interface {
 	ID() RuleID
 	Title() string
 	AppliesTo() []JobType
-	Check(job Job, jobID string) ([]Finding, error)
+	Check(ctx RuleContext, job Job, jobID string) ([]Finding, error)
+}
+
+type RuleContext struct {
+	Contracts *ContractRegistry
 }
 
 type RuleEngine struct {
-	rules []Rule
+	rules    []Rule
+	registry *ContractRegistry
 }
 
-func NewRuleEngine() *RuleEngine {
+func NewRuleEngine(registry *ContractRegistry) *RuleEngine {
 	return &RuleEngine{
-		rules: getRules(),
+		rules:    getRules(),
+		registry: registry,
 	}
+}
+
+type ContractRegistry struct {
+	contracts map[string]OpenAPIDoc
+}
+
+func (r *ContractRegistry) FindOperation(host, method, path string) (*OpenAPIOperation, bool) {
+	doc, ok := r.contracts[strings.ToLower(host)]
+	if !ok {
+		return nil, false
+	}
+
+	return doc.FindOpenAPIOperation(method, path)
+}
+
+func NewContractRegistry(hosts map[string]config.Host) (*ContractRegistry, error) {
+	contracts := make(map[string]OpenAPIDoc)
+
+	baseDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, err
+	}
+
+	configPath := filepath.Join(baseDir, "codeforge-observer", "config.yaml")
+
+	for hostName, host := range hosts {
+		if host.APIContractPath == "" {
+			continue
+		}
+
+		contractPath := host.APIContractPath
+		if !filepath.IsAbs(contractPath) {
+			contractPath = filepath.Join(filepath.Dir(configPath), contractPath)
+		}
+
+		contract, err := LoadOpenAPIDocument(contractPath)
+		if err != nil {
+			return nil, fmt.Errorf("load api contract for host %q: %w", hostName, err)
+		}
+
+		contracts[strings.ToLower(hostName)] = contract
+	}
+
+	return &ContractRegistry{
+		contracts: contracts,
+	}, nil
 }
 
 func getRules() []Rule {
 	return []Rule{
 		UpstreamFailureRule{},
 		UpstreamTimeoutRule{},
+		RequestPathDoesNotExistRule{},
 	}
 }
 
 func (e *RuleEngine) Evaluate(job Job, jobID string) ([]Finding, error) {
 	var findings []Finding
 
+	ctx := RuleContext{
+		Contracts: e.registry,
+	}
+
 	for _, rule := range e.rules {
 		if !ruleApplies(rule, job.JobType()) {
 			continue
 		}
 
-		ruleFindings, err := rule.Check(job, jobID)
+		ruleFindings, err := rule.Check(ctx, job, jobID)
 		if err != nil {
 			return nil, err
 		}
@@ -178,75 +237,4 @@ func ruleApplies(rule Rule, jobType JobType) bool {
 	}
 
 	return false
-}
-
-type UpstreamFailureRule struct{}
-
-func (r UpstreamFailureRule) ID() RuleID {
-	return RuleProxyUpstreamFailure
-}
-
-func (r UpstreamFailureRule) Title() string {
-	return "Upstream request failed"
-}
-
-func (r UpstreamFailureRule) AppliesTo() []JobType {
-	return []JobType{FailureJobType}
-}
-
-func (r UpstreamFailureRule) Check(job Job, jobID string) ([]Finding, error) {
-	failureJob, ok := job.(*FailureJob)
-	if !ok {
-		return nil, nil
-	}
-
-	if failureJob.Meta.Status == 504 {
-		return nil, nil
-	}
-
-	return []Finding{
-		{
-			ID:        uuid.NewString(),
-			JobID:     jobID,
-			RuleID:    string(r.ID()),
-			Title:     r.Title(),
-			Message:   failureJob.Error,
-			CreatedAt: time.Now().UTC(),
-		}}, nil
-}
-
-type UpstreamTimeoutRule struct{}
-
-func (r UpstreamTimeoutRule) ID() RuleID {
-	return RuleProxyUpstreamTimeout
-}
-
-func (r UpstreamTimeoutRule) Title() string {
-	return "Upstream request timed out"
-}
-
-func (r UpstreamTimeoutRule) AppliesTo() []JobType {
-	return []JobType{FailureJobType}
-}
-
-func (r UpstreamTimeoutRule) Check(job Job, jobID string) ([]Finding, error) {
-	failureJob, ok := job.(*FailureJob)
-	if !ok {
-		return nil, nil
-	}
-
-	if failureJob.Meta.Status != 504 {
-		return nil, nil
-	}
-
-	return []Finding{
-		{
-			ID:        uuid.NewString(),
-			JobID:     jobID,
-			RuleID:    string(r.ID()),
-			Title:     r.Title(),
-			Message:   "The upstream service did not respond before the configured timeout.",
-			CreatedAt: time.Now().UTC(),
-		},
-	}, nil
 }

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"cf-observer/internal/audit"
 	"fmt"
 	"net/url"
 	"os"
@@ -37,26 +36,6 @@ func LoadConfigFile() (map[string]Host, error) {
 	}
 
 	AppRunTimeConfig = cfg.RunTime
-
-	for key, host := range cfg.Hosts {
-		if host.APIContractPath == "" {
-			cfg.Hosts[key] = host
-			continue
-		}
-
-		contractPath := host.APIContractPath
-		if !filepath.IsAbs(contractPath) {
-			contractPath = filepath.Join(filepath.Dir(configPath), contractPath)
-		}
-
-		contract, err := audit.LoadOpenAPIDocument(contractPath)
-		if err != nil {
-			return map[string]Host{}, fmt.Errorf("load api contract for host %q: %w", key, err)
-		}
-
-		host.APIContract = contract
-		cfg.Hosts[key] = host
-	}
 
 	return cfg.ValidateHostUrls()
 }
@@ -99,10 +78,9 @@ func (c *Config) ValidateHostUrls() (map[string]Host, error) {
 		}
 
 		c.Hosts[key] = Host{
-			UpstreamRaw: host.UpstreamRaw,
-			Upstream:    u,
-			APIContract: host.APIContract,
-			// ResourceContract: host.ResourceContract,
+			UpstreamRaw:     host.UpstreamRaw,
+			Upstream:        u,
+			APIContractPath: host.APIContractPath,
 		}
 	}
 

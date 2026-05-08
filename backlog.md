@@ -73,7 +73,7 @@
 
 ### Request-Side API Auditing
 
-- [ ] Validate request path exists in contract
+- [x] Validate request path exists in contract
 - [ ] Validate HTTP method is allowed
 - [ ] Validate content type
 - [ ] Validate request body presence/absence
