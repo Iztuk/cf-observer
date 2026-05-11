@@ -198,6 +198,25 @@ func (r *ContractRegistry) FindMethod(host, method, path string) (*OpenAPIOperat
 	return op, true
 }
 
+func (r *ContractRegistry) FindContentType(host, method, path, contentType string) (mt OpenAPIMediaType, applies, found bool) {
+	pathItem, ok := r.FindPathItem(host, path)
+	if !ok {
+		return OpenAPIMediaType{}, false, false
+	}
+
+	op := pathItem.OperationForMethod(method)
+	if op == nil || op.RequestBody == nil {
+		return OpenAPIMediaType{}, false, false
+	}
+
+	mediaType, ok := op.RequestBody.Content[contentType]
+	if !ok {
+		return OpenAPIMediaType{}, true, false
+	}
+
+	return mediaType, true, true
+}
+
 func NewContractRegistry(hosts map[string]config.Host) (*ContractRegistry, error) {
 	contracts := make(map[string]OpenAPIDoc)
 
@@ -237,6 +256,7 @@ func getRules() []Rule {
 		UpstreamTimeoutRule{},
 		RequestPathDoesNotExistRule{},
 		RequestMethodNotAllowedRule{},
+		RequestContentTypeNotAllowed{},
 	}
 }
 

@@ -42,15 +42,38 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "user not found"})
             return
 
-        # Should trigger cf-observer timeout handling if proxy timeout is < 10s.
         if path == "/timeout":
             time.sleep(10)
             self._send_json(200, {"message": "slow response completed"})
             return
 
-        # Attempts to simulate an upstream connection/reset-style failure.
         if path == "/reset":
             self.close_connection = True
+            return
+
+        self._send_json(404, {"error": "route not found"})
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+
+        if path == "/users":
+            content_length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(content_length)
+
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except json.JSONDecodeError:
+                self._send_json(400, {"error": "invalid json"})
+                return
+
+            user = {
+                "id": str(len(USERS) + 1),
+                "email": payload.get("email"),
+                "displayName": payload.get("displayName"),
+            }
+
+            USERS.append(user)
+            self._send_json(201, user)
             return
 
         self._send_json(404, {"error": "route not found"})

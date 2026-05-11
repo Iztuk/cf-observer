@@ -35,6 +35,29 @@ paths:
                 items:
                   $ref: "#/components/schemas/User"
 
+    post:
+      operationId: CreateUser
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /users/{id}:
     get:
       operationId: GetUser
@@ -105,6 +128,18 @@ components:
           type: string
         email:
           type: string
+        displayName:
+          type: string
+
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - displayName
+      properties:
+        email:
+          type: string
+          format: email
         displayName:
           type: string
 

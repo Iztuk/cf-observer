@@ -160,3 +160,53 @@ func (r RequestMethodNotAllowedRule) Check(ctx RuleContext, job Job, jobID strin
 		},
 	}, nil
 }
+
+type RequestContentTypeNotAllowed struct{}
+
+func (r RequestContentTypeNotAllowed) ID() RuleID {
+	return RuleRequestContentTypeNotAllowed
+}
+
+func (r RequestContentTypeNotAllowed) Title() string {
+	return "Request content type not allowed"
+}
+
+func (r RequestContentTypeNotAllowed) AppliesTo() []JobType {
+	return []JobType{RequestJobType}
+}
+
+func (r RequestContentTypeNotAllowed) Check(ctx RuleContext, job Job, jobID string) ([]Finding, error) {
+	requestJob, ok := job.(*RequestJob)
+	if !ok {
+		return nil, nil
+	}
+
+	contentType := requestJob.Headers.Get("Content-Type")
+
+	_, applies, found := ctx.Contracts.FindContentType(
+		requestJob.Meta.Host,
+		requestJob.Meta.Method,
+		requestJob.Meta.Path,
+		contentType,
+	)
+
+	if (applies && found) || !applies {
+		return nil, nil
+	}
+
+	return []Finding{
+		{
+			ID:     uuid.NewString(),
+			JobID:  jobID,
+			RuleID: string(r.ID()),
+			Title:  r.Title(),
+			Message: fmt.Sprintf(
+				"Request content type %q is not allowed for %s %s according to the API contract.",
+				requestJob.Headers.Get("Content-Type"),
+				requestJob.Meta.Method,
+				requestJob.Meta.Path,
+			),
+			CreatedAt: time.Now().UTC(),
+		},
+	}, nil
+}
