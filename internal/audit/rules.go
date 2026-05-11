@@ -98,7 +98,48 @@ func (r RequestPathDoesNotExistRule) Check(ctx RuleContext, job Job, jobID strin
 		return nil, nil
 	}
 
-	_, found := ctx.Contracts.FindOperation(
+	_, found := ctx.Contracts.FindPathItem(
+		requestJob.Meta.Host,
+		requestJob.Meta.Path,
+	)
+
+	if found {
+		return nil, nil
+	}
+
+	return []Finding{
+		{
+			ID:        uuid.NewString(),
+			JobID:     jobID,
+			RuleID:    string(r.ID()),
+			Title:     r.Title(),
+			Message:   fmt.Sprintf("Request path %q is not defined in the API contract.", requestJob.Meta.Path),
+			CreatedAt: time.Now().UTC(),
+		},
+	}, nil
+}
+
+type RequestMethodNotAllowedRule struct{}
+
+func (r RequestMethodNotAllowedRule) ID() RuleID {
+	return RuleRequestMethodNotAllowed
+}
+
+func (r RequestMethodNotAllowedRule) Title() string {
+	return "Request method not allowed"
+}
+
+func (r RequestMethodNotAllowedRule) AppliesTo() []JobType {
+	return []JobType{RequestJobType}
+}
+
+func (r RequestMethodNotAllowedRule) Check(ctx RuleContext, job Job, jobID string) ([]Finding, error) {
+	requestJob, ok := job.(*RequestJob)
+	if !ok {
+		return nil, nil
+	}
+
+	_, found := ctx.Contracts.FindMethod(
 		requestJob.Meta.Host,
 		requestJob.Meta.Method,
 		requestJob.Meta.Path,
@@ -114,7 +155,7 @@ func (r RequestPathDoesNotExistRule) Check(ctx RuleContext, job Job, jobID strin
 			JobID:     jobID,
 			RuleID:    string(r.ID()),
 			Title:     r.Title(),
-			Message:   fmt.Sprintf("Request path %q is not defined in the API contract.", requestJob.Meta.Path),
+			Message:   fmt.Sprintf("Request method %q is not defined in the API contract.", requestJob.Meta.Method),
 			CreatedAt: time.Now().UTC(),
 		},
 	}, nil

@@ -165,6 +165,39 @@ func (r *ContractRegistry) FindOperation(host, method, path string) (*OpenAPIOpe
 	return doc.FindOpenAPIOperation(method, path)
 }
 
+func (r *ContractRegistry) FindPathItem(host, path string) (*OpenAPIPathItem, bool) {
+	doc, ok := r.contracts[strings.ToLower(host)]
+	if !ok {
+		return nil, false
+	}
+
+	if pathItem, ok := doc.Paths[path]; ok {
+		return &pathItem, true
+	}
+
+	for contractPath, pathItem := range doc.Paths {
+		if matchOpenAPIPath(contractPath, path) {
+			return &pathItem, true
+		}
+	}
+
+	return nil, false
+}
+
+func (r *ContractRegistry) FindMethod(host, method, path string) (*OpenAPIOperation, bool) {
+	pathItem, ok := r.FindPathItem(host, path)
+	if !ok {
+		return nil, false
+	}
+
+	op := pathItem.OperationForMethod(method)
+	if op == nil {
+		return nil, false
+	}
+
+	return op, true
+}
+
 func NewContractRegistry(hosts map[string]config.Host) (*ContractRegistry, error) {
 	contracts := make(map[string]OpenAPIDoc)
 
@@ -203,6 +236,7 @@ func getRules() []Rule {
 		UpstreamFailureRule{},
 		UpstreamTimeoutRule{},
 		RequestPathDoesNotExistRule{},
+		RequestMethodNotAllowedRule{},
 	}
 }
 
