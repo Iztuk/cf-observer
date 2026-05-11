@@ -217,6 +217,15 @@ func (r *ContractRegistry) FindContentType(host, method, path, contentType strin
 	return mediaType, true, true
 }
 
+func (r *ContractRegistry) FindBody(host, method, path string) (*OpenAPIRequestBody, bool) {
+	op, ok := r.FindOperation(host, method, path)
+	if !ok {
+		return nil, false
+	}
+
+	return op.RequestBody, true
+}
+
 func NewContractRegistry(hosts map[string]config.Host) (*ContractRegistry, error) {
 	contracts := make(map[string]OpenAPIDoc)
 
@@ -257,6 +266,7 @@ func getRules() []Rule {
 		RequestPathDoesNotExistRule{},
 		RequestMethodNotAllowedRule{},
 		RequestContentTypeNotAllowed{},
+		RequestBodyMissing{},
 	}
 }
 

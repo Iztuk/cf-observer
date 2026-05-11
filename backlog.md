@@ -76,7 +76,7 @@
 - [x] Validate request path exists in contract
 - [x] Validate HTTP method is allowed
 - [x] Validate content type
-- [ ] Validate request body presence/absence
+- [x] Validate request body presence/absence
 - [ ] Validate request body format based on contract media type
 - [ ] Validate JSON format for request body
 
