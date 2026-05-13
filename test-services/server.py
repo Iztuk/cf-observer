@@ -9,6 +9,8 @@ USERS = [
     {"id": "2", "email": "jane@example.com", "displayName": "Jane"},
 ]
 
+PROFILES = []
+
 
 class Handler(BaseHTTPRequestHandler):
     def _send_json(self, status_code, payload):
@@ -20,6 +22,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_json_body(self):
+        content_length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(content_length)
+
+        try:
+            return json.loads(body.decode("utf-8")), None
+        except json.JSONDecodeError:
+            return None, {"error": "invalid json"}
+
     def do_GET(self):
         path = urlparse(self.path).path
 
@@ -29,6 +40,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/users":
             self._send_json(200, USERS)
+            return
+
+        if path == "/profiles":
+            self._send_json(200, PROFILES)
             return
 
         if path.startswith("/users/"):
@@ -57,13 +72,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/users":
-            content_length = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(content_length)
-
-            try:
-                payload = json.loads(body.decode("utf-8"))
-            except json.JSONDecodeError:
-                self._send_json(400, {"error": "invalid json"})
+            payload, err = self._read_json_body()
+            if err:
+                self._send_json(400, err)
                 return
 
             user = {
@@ -74,6 +85,23 @@ class Handler(BaseHTTPRequestHandler):
 
             USERS.append(user)
             self._send_json(201, user)
+            return
+
+        if path == "/profiles":
+            payload, err = self._read_json_body()
+            if err:
+                self._send_json(400, err)
+                return
+
+            profile = {
+                "id": str(len(PROFILES) + 1),
+                "userId": payload.get("userId"),
+                "contact": payload.get("contact"),
+                "preferences": payload.get("preferences"),
+            }
+
+            PROFILES.append(profile)
+            self._send_json(201, profile)
             return
 
         self._send_json(404, {"error": "route not found"})

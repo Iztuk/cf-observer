@@ -115,6 +115,26 @@ const (
 	//
 	// This rule is evaluated against RequestJob values.
 	RuleRequestInvalidBodyFormat RuleID = "request.invalid_body_format"
+
+	// RuleRequestBodySchemaInvalid applies when the request body is syntactically
+	// valid for its media type, but does not conform to the schema declared by the
+	// OpenAPI contract.
+	//
+	// For the initial implementation, this rule should focus on JSON request bodies
+	// only, such as application/json and application/*+json.
+	//
+	// Example:
+	//   - contract: POST /users requires CreateUserRequest
+	//   - schema requires: email, displayName
+	//   - request body: {"email":"john@example.com"}
+	//   - result: missing required field "displayName"
+	//
+	// This rule should run only after body format validation has succeeded. It
+	// assumes the request body can already be parsed, then checks the parsed value
+	// against a supported subset of the OpenAPI schema.
+	//
+	// This rule is evaluated against RequestJob values.
+	RuleRequestBodySchemaInvalid RuleID = "request.body_schema_invalid"
 )
 
 type Rule interface {
@@ -214,6 +234,15 @@ func (r *ContractRegistry) FindBody(host, method, path string) (*OpenAPIRequestB
 	return op.RequestBody, true
 }
 
+func (r *ContractRegistry) ResolveSchemaRef(host, ref string) (*OpenAPISchema, bool) {
+	doc, ok := r.contracts[strings.ToLower(host)]
+	if !ok {
+		return nil, false
+	}
+
+	return doc.ResolveSchemaRef(ref)
+}
+
 func NewContractRegistry(hosts map[string]config.Host) (*ContractRegistry, error) {
 	contracts := make(map[string]OpenAPIDoc)
 
@@ -257,6 +286,7 @@ func getRules() []Rule {
 		RequestBodyMissing{},
 		RequestBodyNotAllowed{},
 		RequestInvalidBodyFormat{},
+		RequestBodySchemaInvalid{},
 	}
 }
 

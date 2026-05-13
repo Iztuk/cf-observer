@@ -500,3 +500,297 @@ func validateMultipart(body []byte, boundary string) error {
 
 	return nil
 }
+
+type RequestBodySchemaInvalid struct{}
+
+func (r RequestBodySchemaInvalid) ID() RuleID {
+	return RuleRequestBodySchemaInvalid
+}
+
+func (r RequestBodySchemaInvalid) Title() string {
+	return "Request body schema invalid"
+}
+
+func (r RequestBodySchemaInvalid) AppliesTo() []JobType {
+	return []JobType{RequestJobType}
+}
+
+func (r RequestBodySchemaInvalid) Check(ctx RuleContext, job Job, jobID string) ([]Finding, error) {
+	requestJob, ok := job.(*RequestJob)
+	if !ok {
+		return nil, nil
+	}
+
+	body, found := ctx.Contracts.FindBody(
+		requestJob.Meta.Host,
+		requestJob.Meta.Method,
+		requestJob.Meta.Path,
+	)
+
+	// Operation could not be resolved. Let path/method rules handle it.
+	if !found {
+		return nil, nil
+	}
+
+	// Operation does not define a requestBody.
+	if body == nil {
+		return nil, nil
+	}
+
+	// Empty body is handled by request.body_missing.
+	if len(requestJob.Body) == 0 {
+		return nil, nil
+	}
+
+	contentType := requestJob.Headers.Get("Content-Type")
+	if contentType == "" {
+		return nil, nil
+	}
+
+	ct, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil, nil
+	}
+
+	ct = strings.ToLower(ct)
+
+	// Content-Type not allowed is handled by request.content_type_not_allowed.
+	if !mediaTypeAllowed(body.Content, ct) {
+		return nil, nil
+	}
+
+	// Initial schema validation only supports JSON bodies.
+	if !isJSONMediaType(ct) {
+		return nil, nil
+	}
+
+	// Invalid JSON syntax is handled by request.invalid_body_format.
+	if err := validateBodyForMediaType(ct, params, requestJob.Body); err != nil {
+		return nil, nil
+	}
+
+	media, ok := findMatchingMediaType(body.Content, ct)
+	if !ok {
+		return nil, nil
+	}
+
+	if media.Schema == nil {
+		return nil, nil
+	}
+
+	var requestBodyJSON any
+	if err := json.Unmarshal(requestJob.Body, &requestBodyJSON); err != nil {
+		return nil, nil
+	}
+
+	errs := validateJSONBodySchema(
+		requestBodyJSON,
+		*media.Schema,
+		func(ref string) (*OpenAPISchema, bool) {
+			return ctx.Contracts.ResolveSchemaRef(requestJob.Meta.Host, ref)
+		},
+		"$",
+		map[string]bool{},
+	)
+
+	if len(errs) == 0 {
+		return nil, nil
+	}
+
+	return []Finding{
+		{
+			ID:     uuid.NewString(),
+			JobID:  jobID,
+			RuleID: string(r.ID()),
+			Title:  r.Title(),
+			Message: fmt.Sprintf(
+				"Request body does not match the OpenAPI schema for %s %s: %s.",
+				requestJob.Meta.Method,
+				requestJob.Meta.Path,
+				joinSchemaErrors(errs),
+			),
+			CreatedAt: time.Now().UTC(),
+		},
+	}, nil
+}
+func validateJSONBodySchema(
+	value any,
+	schema OpenAPISchema,
+	resolveRef func(ref string) (*OpenAPISchema, bool),
+	path string,
+	seenRefs map[string]bool,
+) []error {
+	var errs []error
+
+	if schema.Ref != "" {
+		if seenRefs[schema.Ref] {
+			return []error{
+				fmt.Errorf("%s has circular schema reference %q", path, schema.Ref),
+			}
+		}
+
+		resolved, ok := resolveRef(schema.Ref)
+		if !ok {
+			return []error{
+				fmt.Errorf("%s references unknown schema %q", path, schema.Ref),
+			}
+		}
+
+		seenRefs[schema.Ref] = true
+		errs = append(errs, validateJSONBodySchema(value, *resolved, resolveRef, path, seenRefs)...)
+		delete(seenRefs, schema.Ref)
+
+		return errs
+	}
+
+	switch schema.Type {
+	case "object":
+		obj, ok := value.(map[string]any)
+		if !ok {
+			return []error{
+				fmt.Errorf("%s expected object but got %s", path, jsonTypeName(value)),
+			}
+		}
+
+		required := make(map[string]bool, len(schema.Required))
+		for _, field := range schema.Required {
+			required[field] = true
+		}
+
+		for field := range required {
+			if _, ok := obj[field]; !ok {
+				errs = append(errs, fmt.Errorf("%s missing required field %q", path, field))
+			}
+		}
+
+		for name, propSchema := range schema.Properties {
+			propValue, exists := obj[name]
+			if !exists {
+				continue
+			}
+
+			childPath := path + "." + name
+			errs = append(errs, validateJSONBodySchema(
+				propValue,
+				propSchema,
+				resolveRef,
+				childPath,
+				seenRefs,
+			)...)
+		}
+
+	case "array":
+		arr, ok := value.([]any)
+		if !ok {
+			return []error{
+				fmt.Errorf("%s expected array but got %s", path, jsonTypeName(value)),
+			}
+		}
+
+		if schema.Items == nil {
+			return errs
+		}
+
+		for i, item := range arr {
+			itemPath := fmt.Sprintf("%s[%d]", path, i)
+			errs = append(errs, validateJSONBodySchema(
+				item,
+				*schema.Items,
+				resolveRef,
+				itemPath,
+				seenRefs,
+			)...)
+		}
+
+	case "string":
+		if _, ok := value.(string); !ok {
+			errs = append(errs, fmt.Errorf("%s expected string but got %s", path, jsonTypeName(value)))
+		}
+
+	case "integer":
+		number, ok := value.(float64)
+		if !ok {
+			errs = append(errs, fmt.Errorf("%s expected integer but got %s", path, jsonTypeName(value)))
+			break
+		}
+
+		if number != float64(int64(number)) {
+			errs = append(errs, fmt.Errorf("%s expected integer but got number", path))
+		}
+
+	case "number":
+		if _, ok := value.(float64); !ok {
+			errs = append(errs, fmt.Errorf("%s expected number but got %s", path, jsonTypeName(value)))
+		}
+
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			errs = append(errs, fmt.Errorf("%s expected boolean but got %s", path, jsonTypeName(value)))
+		}
+
+	case "":
+		// Some OpenAPI schemas omit type and only use properties/items/$ref.
+		// For MVP, you can skip, or infer object if properties exist.
+		if len(schema.Properties) > 0 {
+			schema.Type = "object"
+			errs = append(errs, validateJSONBodySchema(value, schema, resolveRef, path, seenRefs)...)
+		}
+
+	default:
+		// Unsupported schema type. Do not fail the request for MVP.
+		return errs
+	}
+
+	return errs
+}
+
+func findMatchingMediaType(content map[string]OpenAPIMediaType, ct string) (*OpenAPIMediaType, bool) {
+	for allowed, media := range content {
+		if strings.EqualFold(allowed, ct) {
+			return &media, true
+		}
+	}
+
+	return nil, false
+}
+
+func jsonTypeName(value any) string {
+	switch value.(type) {
+	case nil:
+		return "null"
+	case map[string]any:
+		return "object"
+	case []any:
+		return "array"
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	case bool:
+		return "boolean"
+	default:
+		return fmt.Sprintf("%T", value)
+	}
+}
+
+func joinSchemaErrors(errs []error) string {
+	if len(errs) == 0 {
+		return ""
+	}
+
+	limit := len(errs)
+	if limit > 3 {
+		limit = 3
+	}
+
+	parts := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		parts = append(parts, errs[i].Error())
+	}
+
+	if len(errs) > limit {
+		parts = append(parts, fmt.Sprintf("and %d more", len(errs)-limit))
+	}
+
+	return strings.Join(parts, "; ")
+}
