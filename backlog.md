@@ -84,7 +84,7 @@
 
 ### Response-Side API Auditing
 
-- [ ] Validate response status codes
+- [x] Validate response status codes
 - [ ] Validate response content type
 - [ ] Validate response body presence/absence
 - [ ] Validate response body format based on contract media type

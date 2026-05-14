@@ -135,6 +135,97 @@ const (
 	//
 	// This rule is evaluated against RequestJob values.
 	RuleRequestBodySchemaInvalid RuleID = "request.body_schema_invalid"
+
+	// RuleResponseStatusCodeNotDefined applies when the upstream response status
+	// code is not defined in the OpenAPI operation's responses map.
+	//
+	// Example:
+	//   - response status: 500
+	//   - contract responses: 200, 400, 404
+	//
+	// This rule should run after the request path and method have been resolved to
+	// an OpenAPI operation because response validation depends on the selected
+	// operation definition.
+	//
+	// This rule is evaluated against ResponseJob values.
+	RuleResponseStatusCodeNotDefined RuleID = "response.status_code_not_defined"
+
+	// RuleResponseContentTypeNotAllowed applies when the upstream response includes
+	// a body and the Content-Type header does not match any media type allowed by
+	// the OpenAPI response definition for the returned status code.
+	//
+	// Example:
+	//   - response Content-Type: text/plain
+	//   - contract allows: application/json
+	//
+	// This validates the declared media type only. It does not prove the body is
+	// actually valid JSON, XML, multipart data, etc.
+	//
+	// This rule is evaluated against ResponseJob values.
+	RuleResponseContentTypeNotAllowed RuleID = "response.content_type_not_allowed"
+
+	// RuleResponseBodyMissing applies when the OpenAPI response definition declares
+	// response content for the returned status code, but the captured response body
+	// is empty.
+	//
+	// Example:
+	//   - contract: 200 response defines application/json content
+	//   - response: 200 OK with no body
+	//
+	// This rule should run after the response status code has been matched to an
+	// OpenAPI response definition.
+	//
+	// This rule is evaluated against ResponseJob values.
+	RuleResponseBodyMissing RuleID = "response.body_missing"
+
+	// RuleResponseBodyNotAllowed applies when the OpenAPI response definition does
+	// not declare response content for the returned status code, but the upstream
+	// response includes a body.
+	//
+	// Example:
+	//   - contract: 204 response has no content
+	//   - response: 204 No Content with a JSON body
+	//
+	// This catches upstream services returning payloads for responses that are
+	// expected to be bodyless.
+	//
+	// This rule is evaluated against ResponseJob values.
+	RuleResponseBodyNotAllowed RuleID = "response.body_not_allowed"
+
+	// RuleResponseInvalidBodyFormat applies when the response body does not match
+	// the expected non-JSON media format declared by the OpenAPI contract.
+	//
+	// Example future uses:
+	//   - application/json body cannot be parsed as JSON
+	//   - application/xml body cannot be parsed as XML
+	//   - text/csv body cannot be parsed as CSV
+	//
+	// This is a generic extension point for media-type-specific validators beyond
+	// JSON. It should run only after content type validation determines which media
+	// type applies.
+	//
+	// This rule is evaluated against ResponseJob values.
+	RuleResponseInvalidBodyFormat RuleID = "response.invalid_body_format"
+
+	// RuleResponseBodySchemaInvalid applies when the response body is syntactically
+	// valid for its media type, but does not conform to the schema declared by the
+	// OpenAPI contract.
+	//
+	// For the initial implementation, this rule should focus on JSON response bodies
+	// only, such as application/json and application/*+json.
+	//
+	// Example:
+	//   - contract: GET /users/{id} returns User
+	//   - schema requires: id, email, displayName
+	//   - response body: {"id":"123","email":"john@example.com"}
+	//   - result: missing required field "displayName"
+	//
+	// This rule should run only after body format validation has succeeded. It
+	// assumes the response body can already be parsed, then checks the parsed value
+	// against a supported subset of the OpenAPI schema.
+	//
+	// This rule is evaluated against ResponseJob values.
+	RuleResponseBodySchemaInvalid RuleID = "response.body_schema_invalid"
 )
 
 type Rule interface {
@@ -296,6 +387,7 @@ func getRules() []Rule {
 		RequestBodyNotAllowed{},
 		RequestInvalidBodyFormat{},
 		RequestBodySchemaInvalid{},
+		ResponseStatusCodeRule{},
 	}
 }
 
