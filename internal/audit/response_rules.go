@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"encoding/json"
 	"fmt"
 	"mime"
 	"strconv"
@@ -315,4 +316,122 @@ func (r ResponseBodyInvalidFormat) Check(ctx RuleContext, job Job, jobID string)
 	}
 
 	return nil, nil
+}
+
+type ResponseBodySchemaInvalid struct{}
+
+func (r ResponseBodySchemaInvalid) ID() RuleID {
+	return RuleResponseBodySchemaInvalid
+}
+
+func (r ResponseBodySchemaInvalid) Title() string {
+	return "Response body schema invalid"
+}
+
+func (r ResponseBodySchemaInvalid) AppliesTo() []JobType {
+	return []JobType{ResponseJobType}
+}
+
+func (r ResponseBodySchemaInvalid) Check(ctx RuleContext, job Job, jobID string) ([]Finding, error) {
+	res, ok := job.(*ResponseJob)
+	if !ok {
+		return nil, nil
+	}
+
+	status := strconv.Itoa(res.Meta.Status)
+
+	body, found := ctx.Contracts.FindResponseBody(
+		res.Meta.Host,
+		res.Meta.Method,
+		res.Meta.Path,
+		status,
+	)
+
+	// Operation or response status could not be resolved.
+	// Let path/method/status-code rules handle it.
+	if !found {
+		return nil, nil
+	}
+
+	// Response does not define a response body/content.
+	if body == nil {
+		return nil, nil
+	}
+
+	// Empty body is handled by response.body_missing.
+	if len(res.Body) == 0 {
+		return nil, nil
+	}
+
+	contentType := res.Headers.Get("Content-Type")
+	if contentType == "" {
+		return nil, nil
+	}
+
+	ct, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil, nil
+	}
+
+	ct = strings.ToLower(ct)
+
+	// Content-Type not allowed is handled by response.content_type_not_allowed.
+	if !mediaTypeAllowed(body.Content, ct) {
+		return nil, nil
+	}
+
+	// Initial schema validation only supports JSON bodies.
+	if !isJSONMediaType(ct) {
+		return nil, nil
+	}
+
+	// Invalid JSON syntax is handled by response.invalid_body_format.
+	if err := validateBodyForMediaType(ct, params, res.Body); err != nil {
+		return nil, nil
+	}
+
+	media, ok := findMatchingMediaType(body.Content, ct)
+	if !ok {
+		return nil, nil
+	}
+
+	if media.Schema == nil {
+		return nil, nil
+	}
+
+	var responseBodyJSON any
+	if err := json.Unmarshal(res.Body, &responseBodyJSON); err != nil {
+		return nil, nil
+	}
+
+	errs := validateJSONBodySchema(
+		responseBodyJSON,
+		*media.Schema,
+		func(ref string) (*OpenAPISchema, bool) {
+			return ctx.Contracts.ResolveSchemaRef(res.Meta.Host, ref)
+		},
+		"$",
+		map[string]bool{},
+	)
+
+	if len(errs) == 0 {
+		return nil, nil
+	}
+
+	return []Finding{
+		{
+			ID:     uuid.NewString(),
+			JobID:  jobID,
+			RuleID: string(r.ID()),
+			Title:  r.Title(),
+			Message: fmt.Sprintf(
+				"Response body does not match the OpenAPI schema for %s %s with status %d: %s.",
+				res.Meta.Method,
+				res.Meta.Path,
+				res.Meta.Status,
+				joinSchemaErrors(errs),
+			),
+			CreatedAt: time.Now().UTC(),
+		},
+	}, nil
 }

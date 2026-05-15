@@ -88,7 +88,7 @@
 - [x] Validate response content type
 - [x] Validate response body presence/absence
 - [x] Validate response body format based on contract media type
-- [ ] Validate basic schema conformance for JSON response bodies
+- [x] Validate basic schema conformance for JSON response bodies
 
 ---
 

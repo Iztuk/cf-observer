@@ -448,6 +448,7 @@ func getRules() []Rule {
 		ResponseBodyMissing{},
 		ResponseBodyNotAllowed{},
 		ResponseBodyInvalidFormat{},
+		ResponseBodySchemaInvalid{},
 	}
 }
 
