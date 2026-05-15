@@ -2,7 +2,9 @@ package audit
 
 import (
 	"fmt"
+	"mime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -222,4 +224,95 @@ func (r ResponseBodyNotAllowed) Check(ctx RuleContext, job Job, jobID string) ([
 			CreatedAt: time.Now().UTC(),
 		},
 	}, nil
+}
+
+type ResponseBodyInvalidFormat struct{}
+
+func (r ResponseBodyInvalidFormat) ID() RuleID {
+	return RuleResponseInvalidBodyFormat
+}
+
+func (r ResponseBodyInvalidFormat) Title() string {
+	return "Response body has invalid format"
+}
+
+func (r ResponseBodyInvalidFormat) AppliesTo() []JobType {
+	return []JobType{ResponseJobType}
+}
+
+func (r ResponseBodyInvalidFormat) Check(ctx RuleContext, job Job, jobID string) ([]Finding, error) {
+	res, ok := job.(*ResponseJob)
+	if !ok {
+		return nil, nil
+	}
+
+	status := strconv.Itoa(res.Meta.Status)
+	body, found := ctx.Contracts.FindResponseBody(
+		res.Meta.Host,
+		res.Meta.Method,
+		res.Meta.Path,
+		status,
+	)
+	if !found {
+		return nil, nil
+	}
+
+	if body == nil {
+		return nil, nil
+	}
+
+	if len(res.Body) == 0 {
+		return nil, nil
+	}
+
+	contentType := res.Headers.Get("Content-Type")
+	if contentType == "" {
+		return nil, nil
+	}
+
+	ct, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return []Finding{
+			{
+				ID:     uuid.NewString(),
+				JobID:  jobID,
+				RuleID: string(r.ID()),
+				Title:  r.Title(),
+				Message: fmt.Sprintf(
+					"Response Content-Type header %q could not be parsed for %s %s.",
+					contentType,
+					res.Meta.Method,
+					res.Meta.Path,
+				),
+				CreatedAt: time.Now().UTC(),
+			},
+		}, nil
+	}
+
+	ct = strings.ToLower(ct)
+
+	if !mediaTypeAllowed(body.Content, ct) {
+		return nil, nil
+	}
+
+	if err := validateBodyForMediaType(ct, params, res.Body); err != nil {
+		return []Finding{
+			{
+				ID:     uuid.NewString(),
+				JobID:  jobID,
+				RuleID: string(r.ID()),
+				Title:  r.Title(),
+				Message: fmt.Sprintf(
+					"Response body is not valid for Content-Type %q on %s %s: %v.",
+					ct,
+					res.Meta.Method,
+					res.Meta.Path,
+					err,
+				),
+				CreatedAt: time.Now().UTC(),
+			},
+		}, nil
+	}
+
+	return nil, nil
 }

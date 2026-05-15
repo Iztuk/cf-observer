@@ -324,21 +324,21 @@ func (r RequestBodyNotAllowed) Check(ctx RuleContext, job Job, jobID string) ([]
 	}, nil
 }
 
-type RequestInvalidBodyFormat struct{}
+type RequestBodyInvalidFormat struct{}
 
-func (r RequestInvalidBodyFormat) ID() RuleID {
+func (r RequestBodyInvalidFormat) ID() RuleID {
 	return RuleRequestInvalidBodyFormat
 }
 
-func (r RequestInvalidBodyFormat) Title() string {
-	return "Request body format not allowed"
+func (r RequestBodyInvalidFormat) Title() string {
+	return "Request body has invalid format"
 }
 
-func (r RequestInvalidBodyFormat) AppliesTo() []JobType {
+func (r RequestBodyInvalidFormat) AppliesTo() []JobType {
 	return []JobType{RequestJobType}
 }
 
-func (r RequestInvalidBodyFormat) Check(ctx RuleContext, job Job, jobID string) ([]Finding, error) {
+func (r RequestBodyInvalidFormat) Check(ctx RuleContext, job Job, jobID string) ([]Finding, error) {
 	requestJob, ok := job.(*RequestJob)
 	if !ok {
 		return nil, nil

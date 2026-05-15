@@ -441,12 +441,13 @@ func getRules() []Rule {
 		RequestContentTypeNotAllowed{},
 		RequestBodyMissing{},
 		RequestBodyNotAllowed{},
-		RequestInvalidBodyFormat{},
+		RequestBodyInvalidFormat{},
 		RequestBodySchemaInvalid{},
 		ResponseStatusCodeRule{},
 		ResponseContentTypeNotAllowed{},
 		ResponseBodyMissing{},
 		ResponseBodyNotAllowed{},
+		ResponseBodyInvalidFormat{},
 	}
 }
 

@@ -46,11 +46,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_invalid_json(self, status_code):
+        body = b'{status: ok}'
+
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         path = urlparse(self.path).path
 
         if path == "/health":
-            self._send_json(200, {"status": "ok"})
+            self._send_invalid_json(200)
             return
 
         if path == "/users":
