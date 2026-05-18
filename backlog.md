@@ -98,7 +98,7 @@
 
 - [x] Load custom rules contract files per host
 - [x] Validate custom rules contract structure at startup
-- [ ] Bind custom rules contracts to configured hosts
+- [x] Bind custom rules contracts to configured hosts
 - [x] Support custom rules contracts in YAML
 - [x] Support custom rules contracts in JSON
 - [x] Generate clear errors for invalid custom rules contracts
