@@ -46,10 +46,19 @@ type RuleMatch struct {
 }
 
 type RulePattern struct {
-	Target  string `json:"target" yaml:"target"`                 // query, header, path, body, field
-	Name    string `json:"name,omitempty" yaml:"name,omitempty"` // param/header/field name
-	Pattern string `json:"pattern" yaml:"pattern"`               // regex
+	Target  TargetType `json:"target" yaml:"target"`                 // query, header, path, field
+	Name    string     `json:"name,omitempty" yaml:"name,omitempty"` // param/header/field name
+	Pattern string     `json:"pattern" yaml:"pattern"`               // regex
 }
+
+type TargetType string
+
+const (
+	TargetTypeQuery  TargetType = "query"
+	TargetTypeHeader TargetType = "header"
+	TargetTypePath   TargetType = "path"
+	TargetTypeField  TargetType = "field"
+)
 
 type RuleFinding struct {
 	Title   string `json:"title" yaml:"title"`
@@ -117,8 +126,25 @@ func validateRulesDocument(doc HostRulesDoc) error {
 		}
 
 		for _, pattern := range rule.Match.Patterns {
-			if strings.TrimSpace(pattern.Target) == "" {
+			if strings.TrimSpace(string(pattern.Target)) == "" {
 				return fmt.Errorf("host rule %q has pattern with missing target", ruleID)
+			}
+
+			if !isValidTargetType(pattern.Target) {
+				return fmt.Errorf(
+					"host rule %q has unsupported pattern target %q",
+					ruleID,
+					pattern.Target,
+				)
+			}
+
+			if !targetAllowedForRuleType(rule.Type, pattern.Target) {
+				return fmt.Errorf(
+					"host rule %q has pattern target %q that is not allowed for rule type %q",
+					ruleID,
+					pattern.Target,
+					rule.Type,
+				)
 			}
 
 			if strings.TrimSpace(pattern.Pattern) == "" {
@@ -132,4 +158,35 @@ func validateRulesDocument(doc HostRulesDoc) error {
 	}
 
 	return nil
+}
+
+func isValidTargetType(target TargetType) bool {
+	switch target {
+	case TargetTypeQuery,
+		TargetTypeHeader,
+		TargetTypePath,
+		TargetTypeField:
+		return true
+	default:
+		return false
+	}
+}
+
+func targetAllowedForRuleType(ruleType RuleType, target TargetType) bool {
+	switch ruleType {
+	case RuleTypeQuery:
+		return target == TargetTypeQuery
+
+	case RuleTypeHeader:
+		return target == TargetTypeHeader
+
+	case RuleTypePath:
+		return target == TargetTypePath
+
+	case RuleTypeBodyField:
+		return target == TargetTypeField
+
+	default:
+		return false
+	}
 }
